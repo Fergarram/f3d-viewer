@@ -1,6 +1,5 @@
 import mathUtils from './math-utils';
 import { ITextureInfo } from './interfaces';
-import { NORMALIZED_QUAD } from './constants';
 
 class Renderer {
 
@@ -22,33 +21,41 @@ class Renderer {
 	init() {
 
 		this.canvas = document.getElementById('main-canvas') as HTMLCanvasElement;
-		this.canvas.width = 320;
-		this.canvas.height = 320;
+		this.canvas.width = window.innerWidth;
+		this.canvas.height = window.innerHeight;
 		this.canvas.style.zIndex = '8';
 		this.canvas.style.position = 'absolute';
 		this.gl = this.canvas.getContext('experimental-webgl', { preserveDrawingBuffer: true }) as WebGLRenderingContext;
+		this.textureInfoArray = [];
+
+		const positionArray = [ 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1 ];
+		const texcoordArray = [ 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1 ];
 
 		this.setupShaders();
 		
 		// Create a position buffer
 		this.positionBuffer = this.gl.createBuffer();
 		this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.positionBuffer);
-		this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(NORMALIZED_QUAD), this.gl.STATIC_DRAW);
+		this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(positionArray), this.gl.STATIC_DRAW);
 
 		// Create a buffer for texture coords
 		this.texcoordBuffer = this.gl.createBuffer();
 		this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.texcoordBuffer);
-		this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(NORMALIZED_QUAD), this.gl.STATIC_DRAW);
+		this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(texcoordArray), this.gl.STATIC_DRAW);
 
 		// Enable alpha for textures
 		this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA);
 		this.gl.enable(this.gl.BLEND);
 
-		for (let [name, img] of Object.entries(this.allImages)) {
+		// Load images
+		// for (let [name, img] of Object.entries(this.allImages)) {
+
+			const img = (window as any).theImage;
+			const name = 'strip';
+
 			const texture = this.gl.createTexture();
 			this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
 
-			// let's assume all images are not a power of 2
 			this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
 			this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.NEAREST);
 			this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
@@ -67,7 +74,7 @@ class Renderer {
 			this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, img);
 
 			this.textureInfoArray[name] = textureInfo;
-		};
+		// };
 	}
 
 	loop(update: (delta: number) => void, render: () => void) {
@@ -88,7 +95,6 @@ class Renderer {
 			window.requestAnimationFrame(animate);
 		};
 
-		// Start the rendering loop
 		animate();
 	}
 
@@ -98,20 +104,18 @@ class Renderer {
 
 		this.gl.useProgram(this.imageProgram);
 
-		// Setup the attributes to pull data from our buffers
 		this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.positionBuffer);
 		this.gl.enableVertexAttribArray(this.positionLocation);
 		this.gl.vertexAttribPointer(this.positionLocation, 2, this.gl.FLOAT, false, 0, 0);
+
 		this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.texcoordBuffer);
 		this.gl.enableVertexAttribArray(this.texcoordLocation);
 		this.gl.vertexAttribPointer(this.texcoordLocation, 2, this.gl.FLOAT, false, 0, 0);
 
-		// this matirx will convert from pixels to clip space
 		let matrix = mathUtils.orthographic(0, this.canvas.width, this.canvas.height, 0, -1, 1);
-
-		// this matrix will translate our quad to x, y
 		matrix = mathUtils.translate(matrix, x, y, 0);
 		matrix = mathUtils.scale(matrix, textureInfo.width, textureInfo.height, 1);
+
 		this.gl.uniformMatrix4fv(this.matrixLocation, false, matrix);
 		this.gl.uniform1i(this.textureLocation, 0);
 		this.gl.uniform4fv(this.imageColorUniformLoc, new Float32Array([1, 1, 1, a]));
@@ -147,13 +151,12 @@ class Renderer {
 
 		const frag = createShader(`
 			precision mediump float;
-			// varying vec2 v_texcoord;
-			// uniform sampler2D u_texture;
+			varying vec2 v_texcoord;
+			uniform sampler2D u_texture;
 			uniform vec4 u_color;
 			
 			void main() {
-				// gl_FragColor = texture2D(u_texture, v_texcoord) * u_color;
-				// gl_FragColor = u_color;
+				gl_FragColor = texture2D(u_texture, v_texcoord) * u_color;
 			}
 		`, this.gl.FRAGMENT_SHADER);
 
