@@ -8,7 +8,7 @@ const draw = () => {
 
 
 const img = new Image();
-img.src = 'castle-damaged.png';
+img.src = 'monu1.png';
 img.onload = () => {
     (window as any).theImage = img;
 

@@ -1,5 +1,5 @@
 import mathUtils from './math-utils';
-import { ITextureInfo } from './interfaces';
+import { ILayerTextureInfo } from './interfaces';
 
 class Renderer {
 
@@ -16,20 +16,25 @@ class Renderer {
 	texcoordBuffer: WebGLBuffer;
 
 	allImages: HTMLImageElement[];
-	textureInfoArray: ITextureInfo[];
+	modelFrameStrip: ILayerTextureInfo[];
+	modelHeight: number;
 
 	init() {
 
 		this.canvas = document.getElementById('main-canvas') as HTMLCanvasElement;
-		this.canvas.width = window.innerWidth;
-		this.canvas.height = window.innerHeight;
+		this.canvas.width = window.innerWidth / 2;
+		this.canvas.style.transform = 'scale(2)';
+		this.canvas.style.imageRendering = 'pixelated';
+		this.canvas.height = window.innerHeight / 2;
 		this.canvas.style.zIndex = '8';
 		this.canvas.style.position = 'absolute';
 		this.gl = this.canvas.getContext('experimental-webgl', { preserveDrawingBuffer: true }) as WebGLRenderingContext;
-		this.textureInfoArray = [];
+		
+		this.modelFrameStrip = [];
+		this.modelHeight = 79;
 
-		const positionArray = [ 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1 ];
-		const texcoordArray = [ 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1 ];
+		const positionArray = this.generatePositionArray(this.modelHeight);
+		const texcoordArray = this.generateTexcoordArray(this.modelHeight);
 
 		this.setupShaders();
 		
@@ -49,7 +54,6 @@ class Renderer {
 
 		// Load images
 		// for (let [name, img] of Object.entries(this.allImages)) {
-
 			const img = (window as any).theImage;
 			const name = 'strip';
 
@@ -61,19 +65,18 @@ class Renderer {
 			this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
 			this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
 
-			const textureInfo = {
-				width: 1,
-				height: 1,
+			const stripInfo: ILayerTextureInfo = {
+				width: img.width,
+				height: img.height,
+				layer_w: img.width,
+				layer_h: img.height / this.modelHeight,
 				texture: texture
 			};
 
-			textureInfo.width = img.width;
-			textureInfo.height = img.height;
-
-			this.gl.bindTexture(this.gl.TEXTURE_2D, textureInfo.texture);
+			this.gl.bindTexture(this.gl.TEXTURE_2D, stripInfo.texture);
 			this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, img);
 
-			this.textureInfoArray[name] = textureInfo;
+			this.modelFrameStrip[name] = stripInfo;
 		// };
 	}
 
@@ -86,7 +89,7 @@ class Renderer {
 			update(delta);
 
 			this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-			this.gl.clearColor(0, 0, 0, 1);
+			this.gl.clearColor(1, 1, 1, 1);
 			this.gl.clear(this.gl.COLOR_BUFFER_BIT);
 
 			render();
@@ -99,8 +102,8 @@ class Renderer {
 	}
 
 	drawImage(imageName: string, x: number, y: number, a = 1) {
-		const textureInfo: ITextureInfo = this.textureInfoArray[imageName];
-		this.gl.bindTexture(this.gl.TEXTURE_2D, textureInfo.texture);
+		const stripInfo: ILayerTextureInfo = this.modelFrameStrip[imageName];
+		this.gl.bindTexture(this.gl.TEXTURE_2D, stripInfo.texture);
 
 		this.gl.useProgram(this.imageProgram);
 
@@ -114,18 +117,17 @@ class Renderer {
 
 		let matrix = mathUtils.orthographic(0, this.canvas.width, this.canvas.height, 0, -1, 1);
 		matrix = mathUtils.translate(matrix, x, y, 0);
-		matrix = mathUtils.scale(matrix, textureInfo.width, textureInfo.height, 1);
+		matrix = mathUtils.scale(matrix, stripInfo.layer_w, stripInfo.layer_h, 1);
 
 		this.gl.uniformMatrix4fv(this.matrixLocation, false, matrix);
 		this.gl.uniform1i(this.textureLocation, 0);
 		this.gl.uniform4fv(this.imageColorUniformLoc, new Float32Array([1, 1, 1, a]));
-		this.gl.drawArrays(this.gl.TRIANGLES, 0, 6);
+		this.gl.drawArrays(this.gl.TRIANGLES, 0, 6 * this.modelHeight);
 	}
 
 	setupShaders(): WebGLProgram {
 
 		const createShader = (sourceCode: string, type: number): WebGLShader => {
-			// Compiles either a shader of type gl.VERTEX_SHADER or gl.FRAGMENT_SHADER
 			var shader = this.gl.createShader(type);
 			this.gl.shaderSource(shader, sourceCode);
 			this.gl.compileShader(shader);
@@ -181,6 +183,31 @@ class Renderer {
 		this.matrixLocation = this.gl.getUniformLocation(this.imageProgram, "u_matrix");
 		this.textureLocation = this.gl.getUniformLocation(this.imageProgram, "u_texture");
 		this.imageColorUniformLoc = this.gl.getUniformLocation(this.imageProgram, 'u_color');
+	}
+
+	generatePositionArray(layers: number) {
+		const quad = [ 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1];
+		let array = [];
+		for (let l = 0; l < layers; l++) {
+			array = array.concat( quad.map((v, i) => i % 2 !== 0 ? v - ((1 / layers) * l) : v ) );	
+		}
+		return array;
+	}
+
+	generateTexcoordArray(layers: number) {
+		let array = [];
+		for (let l = 0; l < layers; l++) {
+			const quad = [
+							0, (l / layers), // 1
+							0, (l / layers) + (1 / layers), // 2
+							1, (l / layers), // 3
+							1, (l / layers), // 4
+							0, (l / layers) + (1 / layers), // 5
+							1, (l / layers) + (1 / layers)  // 6
+						];
+			array = array.concat( quad );
+		}
+		return array;
 	}
 }
 
