@@ -19,21 +19,56 @@ class Renderer {
 	modelFrameStrip: ILayerTextureInfo[];
 	modelHeight: number;
 
+	generatePositionArray(layers: number, layer_h: number) {
+		const quad = [ 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1];
+		const pixelVal = (1 / layer_h);
+		let array = [];
+		for (let l = 0; l < layers; l++) {
+			array = array.concat( quad.map((v, i) => i % 2 !== 0 ? v - (pixelVal * l) : v ) );	
+		}
+		return array;
+	}
+
+	generateTexcoordArray(layers: number) {
+		let array = [];
+		for (let l = 0; l < layers; l++) {
+			const quad = [
+							0, (l / layers), // 1
+							0, (l / layers) + (1 / layers), // 2
+							1, (l / layers), // 3
+							1, (l / layers), // 4
+							0, (l / layers) + (1 / layers), // 5
+							1, (l / layers) + (1 / layers)  // 6
+						];
+			array = array.concat( quad );
+		}
+		return array;
+	}
+
 	init() {
 
 		this.canvas = document.getElementById('main-canvas') as HTMLCanvasElement;
-		this.canvas.width = window.innerWidth / 2;
+		this.canvas.width = window.innerWidth;
 		this.canvas.style.transform = 'scale(2)';
 		this.canvas.style.imageRendering = 'pixelated';
-		this.canvas.height = window.innerHeight / 2;
+		this.canvas.height = window.innerHeight;
 		this.canvas.style.zIndex = '8';
 		this.canvas.style.position = 'absolute';
 		this.gl = this.canvas.getContext('experimental-webgl', { preserveDrawingBuffer: true }) as WebGLRenderingContext;
 		
 		this.modelFrameStrip = [];
-		this.modelHeight = 79;
+		this.modelHeight = 96;
+		const img = (window as any).theImage;
+		const name = 'strip';
+		const stripInfo: ILayerTextureInfo = {
+			width: img.width,
+			height: img.height,
+			layer_w: img.width,
+			layer_h: img.height / this.modelHeight,
+			texture: null
+		};
 
-		const positionArray = this.generatePositionArray(this.modelHeight);
+		const positionArray = this.generatePositionArray(this.modelHeight, stripInfo.layer_h);
 		const texcoordArray = this.generateTexcoordArray(this.modelHeight);
 
 		this.setupShaders();
@@ -54,9 +89,6 @@ class Renderer {
 
 		// Load images
 		// for (let [name, img] of Object.entries(this.allImages)) {
-			const img = (window as any).theImage;
-			const name = 'strip';
-
 			const texture = this.gl.createTexture();
 			this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
 
@@ -65,13 +97,7 @@ class Renderer {
 			this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
 			this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
 
-			const stripInfo: ILayerTextureInfo = {
-				width: img.width,
-				height: img.height,
-				layer_w: img.width,
-				layer_h: img.height / this.modelHeight,
-				texture: texture
-			};
+			stripInfo.texture = texture;
 
 			this.gl.bindTexture(this.gl.TEXTURE_2D, stripInfo.texture);
 			this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, img);
@@ -183,31 +209,6 @@ class Renderer {
 		this.matrixLocation = this.gl.getUniformLocation(this.imageProgram, "u_matrix");
 		this.textureLocation = this.gl.getUniformLocation(this.imageProgram, "u_texture");
 		this.imageColorUniformLoc = this.gl.getUniformLocation(this.imageProgram, 'u_color');
-	}
-
-	generatePositionArray(layers: number) {
-		const quad = [ 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1];
-		let array = [];
-		for (let l = 0; l < layers; l++) {
-			array = array.concat( quad.map((v, i) => i % 2 !== 0 ? v - ((1 / layers) * l) : v ) );	
-		}
-		return array;
-	}
-
-	generateTexcoordArray(layers: number) {
-		let array = [];
-		for (let l = 0; l < layers; l++) {
-			const quad = [
-							0, (l / layers), // 1
-							0, (l / layers) + (1 / layers), // 2
-							1, (l / layers), // 3
-							1, (l / layers), // 4
-							0, (l / layers) + (1 / layers), // 5
-							1, (l / layers) + (1 / layers)  // 6
-						];
-			array = array.concat( quad );
-		}
-		return array;
 	}
 }
 
