@@ -1388,6 +1388,10 @@ export default (function() {
     return dst;
   }
 
+  function degToRad(degrees) {
+    return degrees * (Math.PI / 180);
+  }
+
   return {
     copy: copy,
     lookAt: lookAt,
@@ -1425,6 +1429,7 @@ export default (function() {
     transformDirection: transformDirection,
     transformNormal: transformNormal,
     setDefaultType: setDefaultType,
+    degToRad: degToRad
   };
 
 })();

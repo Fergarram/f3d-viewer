@@ -1,4 +1,4 @@
-import mathUtils from './math-utils';
+import m4 from './math-utils';
 import { ILayerTextureInfo } from './interfaces';
 
 class Renderer {
@@ -18,13 +18,29 @@ class Renderer {
 	allImages: HTMLImageElement[];
 	modelFrameStrip: ILayerTextureInfo[];
 	modelHeight: number;
+	positionArray: number[];
+	texcoordArray: number[];
 
-	generatePositionArray(layers: number, layer_h: number) {
+	generatePositionArray(layers: number, layer_h: number, angle: number) {
+
+		const rotate = (x: number, y: number, a: number) => {
+			return [
+				(Math.cos(a) * x) + (-Math.sin(a) * y),
+				(Math.sin(a) * x) + (Math.cos(a) * y)
+			];
+		};
+
+		const a = m4.degToRad(angle);
+		const rotated = [ ...rotate(0, 0, a),
+						  ...rotate(0, 1, a),
+						  ...rotate(1, 0, a),
+						  ...rotate(1, 0, a),
+						  ...rotate(0, 1, a),
+						  ...rotate(1, 1, a)];
 		const quad = [ 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1];
-		const pixelVal = (1 / layer_h);
 		let array = [];
 		for (let l = 0; l < layers; l++) {
-			array = array.concat( quad.map((v, i) => i % 2 !== 0 ? v - (pixelVal * l) : v ) );	
+			array = array.concat( rotated.map((v, i) => i % 2 !== 0 ? v - ((1 / layer_h) * l) : v ) );	
 		}
 		return array;
 	}
@@ -57,7 +73,7 @@ class Renderer {
 		this.gl = this.canvas.getContext('experimental-webgl', { preserveDrawingBuffer: true }) as WebGLRenderingContext;
 		
 		this.modelFrameStrip = [];
-		this.modelHeight = 96;
+		this.modelHeight = 40;
 		const img = (window as any).theImage;
 		const name = 'strip';
 		const stripInfo: ILayerTextureInfo = {
@@ -68,20 +84,20 @@ class Renderer {
 			texture: null
 		};
 
-		const positionArray = this.generatePositionArray(this.modelHeight, stripInfo.layer_h);
-		const texcoordArray = this.generateTexcoordArray(this.modelHeight);
+		this.positionArray = this.generatePositionArray(this.modelHeight, stripInfo.layer_h, 0);
+		this.texcoordArray = this.generateTexcoordArray(this.modelHeight);
 
 		this.setupShaders();
 		
 		// Create a position buffer
 		this.positionBuffer = this.gl.createBuffer();
 		this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.positionBuffer);
-		this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(positionArray), this.gl.STATIC_DRAW);
+		this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(this.positionArray), this.gl.STATIC_DRAW);
 
 		// Create a buffer for texture coords
 		this.texcoordBuffer = this.gl.createBuffer();
 		this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.texcoordBuffer);
-		this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(texcoordArray), this.gl.STATIC_DRAW);
+		this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(this.texcoordArray), this.gl.STATIC_DRAW);
 
 		// Enable alpha for textures
 		this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA);
@@ -115,7 +131,7 @@ class Renderer {
 			update(delta);
 
 			this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-			this.gl.clearColor(1, 1, 1, 1);
+			this.gl.clearColor(0, 0, 0, 0);
 			this.gl.clear(this.gl.COLOR_BUFFER_BIT);
 
 			render();
@@ -127,13 +143,15 @@ class Renderer {
 		animate();
 	}
 
-	drawImage(imageName: string, x: number, y: number, a = 1) {
+	drawImage(imageName: string, x: number, y: number, angle: number, a = 1) {
 		const stripInfo: ILayerTextureInfo = this.modelFrameStrip[imageName];
 		this.gl.bindTexture(this.gl.TEXTURE_2D, stripInfo.texture);
 
 		this.gl.useProgram(this.imageProgram);
 
 		this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.positionBuffer);
+		this.positionArray = this.generatePositionArray(this.modelHeight, stripInfo.layer_h, angle);
+		this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(this.positionArray), this.gl.STATIC_DRAW);
 		this.gl.enableVertexAttribArray(this.positionLocation);
 		this.gl.vertexAttribPointer(this.positionLocation, 2, this.gl.FLOAT, false, 0, 0);
 
@@ -141,9 +159,9 @@ class Renderer {
 		this.gl.enableVertexAttribArray(this.texcoordLocation);
 		this.gl.vertexAttribPointer(this.texcoordLocation, 2, this.gl.FLOAT, false, 0, 0);
 
-		let matrix = mathUtils.orthographic(0, this.canvas.width, this.canvas.height, 0, -1, 1);
-		matrix = mathUtils.translate(matrix, x, y, 0);
-		matrix = mathUtils.scale(matrix, stripInfo.layer_w, stripInfo.layer_h, 1);
+		let matrix = m4.orthographic(0, this.canvas.width, this.canvas.height, 0, -1, 1);
+		matrix = m4.translate(matrix, x, y, 0);
+		matrix = m4.scale(matrix, stripInfo.layer_w, stripInfo.layer_h, 1);
 
 		this.gl.uniformMatrix4fv(this.matrixLocation, false, matrix);
 		this.gl.uniform1i(this.textureLocation, 0);
@@ -164,7 +182,6 @@ class Renderer {
 			}
 			return shader;
 		};
-
 		const vertex = createShader(`
 			attribute vec4 a_position;
 			attribute vec2 a_texcoord;
@@ -172,6 +189,7 @@ class Renderer {
 			varying vec2 v_texcoord;
 			
 			void main() {
+			  
 				gl_Position = u_matrix * a_position;
 				v_texcoord = a_texcoord;
 			}
