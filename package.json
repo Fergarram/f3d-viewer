@@ -16,5 +16,9 @@
     "typescript": "^3.8.3",
     "webpack": "^4.43.0",
     "webpack-cli": "^3.3.11"
+  },
+  "dependencies": {
+    "chokidar": "^3.4.0",
+    "parse-magica-voxel": "^2.0.0"
   }
 }
